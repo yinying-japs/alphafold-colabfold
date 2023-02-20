@@ -186,7 +186,7 @@ class AlphaFold_noE(hk.Module):
     # initialize
     if prev is None:
 
-      L = num_residues
+      L = batch["aatype"].shape[0]
       prev = {'prev_msa_first_row': jnp.zeros([L,256]),
               'prev_pair':          jnp.zeros([L,L,128]),
               'prev_pos':           jnp.zeros([L,37,3])}
