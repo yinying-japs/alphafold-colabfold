@@ -1925,7 +1925,7 @@ class EmbeddingsAndEvoformer(hk.Module):
       if c.max_relative_feature:
         # Add one-hot-encoded clipped residue distances to the pair activations.
         pos = batch['residue_index']
-        offset = pos[:,None] - pos[None,:]
+        offset = batch.pop("offset", pos[:,None] - pos[None,:])
         offset = jnp.clip(offset + c.max_relative_feature, a_min=0, a_max=2 * c.max_relative_feature)
         if "asym_id" in batch:
           o = batch['asym_id'][:,None] - batch['asym_id'][None,:]

@@ -513,7 +513,7 @@ class EmbeddingsAndEvoformer(hk.Module):
     pos = batch['residue_index']
     asym_id = batch['asym_id']
     asym_id_same = jnp.equal(asym_id[:, None], asym_id[None, :])
-    offset = pos[:, None] - pos[None, :]
+    offset = batch.pop("offset", pos[:,None] - pos[None,:])
     dtype = jnp.bfloat16 if gc.bfloat16 else jnp.float32
 
     clipped_offset = jnp.clip(
