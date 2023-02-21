@@ -222,6 +222,7 @@ CONFIG = ml_collections.ConfigDict({
                 'template_sum_probs': [NUM_TEMPLATES, None],
                 'true_msa': [NUM_MSA_SEQ, NUM_RES],
                 'asym_id': [NUM_RES],
+                'offset': [NUM_RES, NUM_RES],
             },
             'fixed_size': True,
             'subsample_templates': False,  # We want top templates.
