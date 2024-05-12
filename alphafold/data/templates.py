@@ -27,7 +27,9 @@ from alphafold.common import residue_constants
 from alphafold.data import mmcif_parsing
 from alphafold.data import parsers
 from alphafold.data.tools import kalign
+from alphafold.data.tools.utils import minibatches
 import numpy as np
+from joblib import Parallel,delayed
 
 # Internal import (7716).
 
@@ -857,13 +859,15 @@ class TemplateHitFeaturizer(abc.ABC):
     """Computes the templates for given query sequence."""
 
 
+
 class HhsearchHitFeaturizer(TemplateHitFeaturizer):
   """A class for turning a3m hits from hhsearch to template features."""
 
   def get_templates(
       self,
       query_sequence: str,
-      hits: Sequence[parsers.TemplateHit]) -> TemplateSearchResult:
+      hits: Sequence[parsers.TemplateHit],
+      nproc: int=os.cpu_count()) -> TemplateSearchResult:
     """Computes the templates for given query sequence (more details above)."""
     logging.info('Searching for template for: %s', query_sequence)
 
@@ -875,37 +879,51 @@ class HhsearchHitFeaturizer(TemplateHitFeaturizer):
     errors = []
     warnings = []
 
-    for hit in sorted(hits, key=lambda x: x.sum_probs, reverse=True):
-      # We got all the templates we wanted, stop processing hits.
+    hits=sorted(hits, key=lambda x: x.sum_probs, reverse=True)
+
+    # use max_hit as batch size
+    for batch_hits in minibatches(inputs_data=hits,batch_size=self._max_hits):
+
+      # Early break if we got all the templates we wanted.
       if num_hits >= self._max_hits:
         break
-
-      result = _process_single_hit(
+      
+      # run kalign in parallel manner.
+      batch_results: Tuple[SingleHitResult]=Parallel(n_jobs=nproc,verbose=False)(
+        delayed(
+          _process_single_hit,
+        )(hit=hit,
           query_sequence=query_sequence,
-          hit=hit,
           mmcif_dir=self._mmcif_dir,
           max_template_date=self._max_template_date,
           release_dates=self._release_dates,
           obsolete_pdbs=self._obsolete_pdbs,
           strict_error_check=self._strict_error_check,
-          kalign_binary_path=self._kalign_binary_path)
+          kalign_binary_path=self._kalign_binary_path) for hit in batch_hits)
+      
 
-      if result.error:
-        errors.append(result.error)
+      for i,result in enumerate(batch_results):
+        hit=batch_hits[i]
+        # We got all the templates we wanted, stop processing hits.
+        if num_hits >= self._max_hits:
+          break
 
-      # There could be an error even if there are some results, e.g. thrown by
-      # other unparsable chains in the same mmCIF file.
-      if result.warning:
-        warnings.append(result.warning)
+        if result.error:
+          errors.append(result.error)
 
-      if result.features is None:
-        logging.info('Skipped invalid hit %s, error: %s, warning: %s',
-                     hit.name, result.error, result.warning)
-      else:
-        # Increment the hit counter, since we got features out of this hit.
-        num_hits += 1
-        for k in template_features:
-          template_features[k].append(result.features[k])
+        # There could be an error even if there are some results, e.g. thrown by
+        # other unparsable chains in the same mmCIF file.
+        if result.warning:
+          warnings.append(result.warning)
+
+        if result.features is None:
+          logging.info('Skipped invalid hit %s, error: %s, warning: %s',
+                      hit.name, result.error, result.warning)
+        else:
+          # Increment the hit counter, since we got features out of this hit.
+          num_hits += 1
+          for k in template_features:
+            template_features[k].append(result.features[k])
 
     for name in template_features:
       if num_hits > 0:
@@ -917,6 +935,7 @@ class HhsearchHitFeaturizer(TemplateHitFeaturizer):
 
     return TemplateSearchResult(
         features=template_features, errors=errors, warnings=warnings)
+
 
 
 class HmmsearchHitFeaturizer(TemplateHitFeaturizer):

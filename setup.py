@@ -42,6 +42,7 @@ setup(
         'pandas',
         'scipy',
         #'tensorflow-cpu',
+        'joblib',
     ],
     tests_require=[
         'matplotlib',  # For notebook_utils_test.
